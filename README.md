@@ -50,3 +50,19 @@ mv silero_vad.onnx silero/
 ## Design
 
 Audio is passed around as raw numpy arrays (`(frames, samplerate)`) rather than encoded bytes wherever possible, since mic capture, transcription, and playback all happen in-process on the same device. This skips unnecessary encode/decode overhead, only `audio.py`'s `record_wav`/`play_wav` produce actual WAV bytes, for cases that need portable output (saving to disk, sending over a network).
+
+## Server
+
+Expose `listen`/`speak` over HTTP, for running parrot on one machine (e.g. a Raspberry Pi with a mic and speaker) and calling it from another.
+
+```bash
+uv sync --extra server
+uv run parrot-serve
+```
+
+Binds 0.0.0.0:8420.
+
+- POST /listen — records until a pause in speech, returns {"text": "..."}
+- POST /speak — body {"text": "..."}, plays it back, returns {"ok": true}
+
+Both endpoints block until their operation finishes (recording or playback), and access is serialized since there's only one mic and one speaker.

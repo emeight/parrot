@@ -16,9 +16,13 @@ dependencies = [
     "soundfile>=0.14.0",
 ]
 
+[project.optional-dependencies]
+server = ["fastapi>=0.115", "uvicorn>=0.34"]
+
 [project.scripts]
 parrot = "parrot.cli:repeat"
 parrot-scribe = "parrot.cli:scribe"
+parrot-serve = "parrot.server:main"
 
 [build-system]
 requires = ["uv_build>=0.12.12,<0.13.0"]

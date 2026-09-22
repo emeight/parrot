@@ -31,7 +31,7 @@ def load_synthesizer(
 
 
 def synthesize(
-    synthesizer: sherpa_onnx.OfflineTts, text: str, speaker_id: int = 0, speed: float = 1.0
+    synthesizer: sherpa_onnx.OfflineTts, text: str, speaker_id: int = 10, speed: float = 1.0
 ) -> tuple[np.ndarray, int]:
     """Synthesize text to raw audio.
 

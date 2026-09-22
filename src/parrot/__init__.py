@@ -1,25 +1,37 @@
 """Primary functions."""
 
-from parrot.audio import record, play
+from parrot.audio import play, stream_mic
 from parrot.tts import load_synthesizer, synthesize
-from parrot.stt import load_recognizer, transcribe
+from parrot.stt import load_recognizer, load_vad, transcribe
 
 
 # --- speech-to-text ---
 
-def listen(chunk_duration: float = 4.0, samplerate: int = 16000) -> str:
-    """Record one chunk from the mic and return its transcript.
-    
+def listen(min_silence_duration: float = 0.5, samplerate: int = 16000) -> str:
+    """Record from the mic until a pause in speech, then return its transcript.
+
+    Waits for the VAD to see speech followed by `min_silence_duration` seconds
+    of silence, instead of recording a fixed duration, so short utterances
+    return quickly and long ones aren't cut off.
+
     Args:
-        chunk_duration: Length of the recording, in seconds.
+        min_silence_duration: Length of silence, in seconds, that marks the end of speech.
         samplerate: Sample rate to record at, in Hz (NVIDIA's Parakeet model expects 16kHz).
-    
+
     Returns:
-        The transcribed text.
+        The transcribed text of the first detected speech segment.
     """
     recognizer = load_recognizer()
-    frames, sr = record(duration=chunk_duration, samplerate=samplerate)
-    return transcribe(recognizer, frames, sr)
+    vad = load_vad(samplerate=samplerate, min_silence_duration=min_silence_duration)
+    window_size = vad.config.silero_vad.window_size  # samples the VAD requires per accept_waveform call
+
+    mic = stream_mic(samplerate=samplerate, block_size=window_size)
+    while True:
+        vad.accept_waveform(next(mic))
+        if not vad.empty():
+            samples = vad.front.samples
+            vad.pop()
+            return transcribe(recognizer, samples, samplerate)
 
 
 # --- text-to-speech ---

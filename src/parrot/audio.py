@@ -8,6 +8,7 @@ import sounddevice as sd
 import soundfile as sf
 
 from collections import deque
+from typing import Iterator
 
 
 # --- raw arrays: for live, in-process use (i.e. streaming to a speech-to-text model) ---
@@ -39,6 +40,25 @@ def play(frames: np.ndarray, samplerate: int) -> None:
     """
     sd.play(frames, samplerate)
     sd.wait()
+
+def stream_mic(samplerate: int = 16000, block_size: int = 512) -> Iterator[np.ndarray]:
+    """Continuously yield raw audio blocks from the default mic.
+
+    Unlike `record`, this doesn't wait for a fixed duration, it opens an
+    input stream and yields one block at a time for as long as the caller
+    keeps iterating (e.g. until a VAD decides enough silence has passed).
+
+    Args:
+        samplerate: Sample rate to record at, in Hz.
+        block_size: Number of samples yielded per iteration.
+
+    Yields:
+        1-D numpy arrays of `block_size` mono samples, float32.
+    """
+    with sd.InputStream(samplerate=samplerate, channels=1, dtype="float32") as stream:
+        while True:
+            block, _ = stream.read(block_size)
+            yield block.reshape(-1)
 
 
 # --- WAV bytes: for saving to disk, sending over network, etc. ---

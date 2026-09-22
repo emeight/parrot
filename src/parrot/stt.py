@@ -4,8 +4,6 @@ import sherpa_onnx
 
 import numpy as np
 
-from parrot.audio import record
-
 
 def load_recognizer(
     encoder: str = "models/parakeet/encoder.int8.onnx",
@@ -39,34 +37,35 @@ def transcribe(recognizer: sherpa_onnx.OfflineRecognizer, frames: np.ndarray, sa
 
     Args:
         recognizer: A loaded OfflineRecognizer.
-        frames: Numpy array of mono audio samples.
+        frames: Mono audio samples, as a numpy array or a plain list (sherpa-onnx's VAD segments return samples as a list).
         samplerate: Sample rate of frames, in Hz.
 
     Returns:
         The transcribed text.
     """
     stream = recognizer.create_stream()
-    stream.accept_waveform(samplerate, frames.flatten())
+    stream.accept_waveform(samplerate, np.asarray(frames).flatten())
     recognizer.decode_stream(stream)
     return stream.result.text
 
 
-def live_transcribe(chunk_duration: float = 4.0, samplerate: int = 16000) -> None:
-    """Continuously record fixed-length chunks and print their transcripts.
+def load_vad(
+    model: str = "models/silero/silero_vad.onnx",
+    samplerate: int = 16000,
+    min_silence_duration: float = 0.5,
+) -> sherpa_onnx.VoiceActivityDetector:
+    """Load the Silero voice activity detector.
 
     Args:
-        chunk_duration: Length of each chunk, in seconds.
-        samplerate: Sample rate to record at, in Hz (Parakeet expects 16kHz).
+        model: Path to the silero_vad.onnx model.
+        samplerate: Sample rate to run the VAD at, in Hz (must match the mic and recognizer).
+        min_silence_duration: Length of silence, in seconds, needed to close a speech segment.
 
     Returns:
-        None. Runs until interrupted with Ctrl+C.
+        A loaded VoiceActivityDetector.
     """
-    recognizer = load_recognizer()
-    try:
-        while True:
-            frames, sr = record(duration=chunk_duration, samplerate=samplerate)
-            text = transcribe(recognizer, frames, sr)
-            if text:
-                print(text)
-    except KeyboardInterrupt:
-        print()
+    config = sherpa_onnx.VadModelConfig()
+    config.silero_vad.model = model
+    config.silero_vad.min_silence_duration = min_silence_duration
+    config.sample_rate = samplerate
+    return sherpa_onnx.VoiceActivityDetector(config, buffer_size_in_seconds=100)

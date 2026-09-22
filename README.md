@@ -9,8 +9,9 @@ On-device speech-to-text and text-to-speech, fully local, no cloud APIs.
 
 - **STT**: [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) (int8, via [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx))
 - **TTS**: [Kokoro](https://huggingface.co/hexgrad/Kokoro-82M) (English, `kokoro-en-v0_19`, via sherpa-onnx)
+- **VAD**: [Silero VAD](https://github.com/snakers4/silero-vad) (via sherpa-onnx)
 
-Both run fully offline once downloaded.
+All three run fully offline once downloaded.
 
 ## Usage
 
@@ -40,6 +41,10 @@ curl -LO https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/koko
 tar xf kokoro-en-v0_19.tar.bz2
 mv kokoro-en-v0_19 kokoro
 rm kokoro-en-v0_19.tar.bz2
+
+curl -LO https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx
+mkdir -p silero
+mv silero_vad.onnx silero/
 ```
 
 ## Design

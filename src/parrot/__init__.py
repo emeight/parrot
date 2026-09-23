@@ -1,5 +1,7 @@
 """Primary functions."""
 
+from contextlib import closing
+
 from parrot.audio import play, stream_mic
 from parrot.tts import load_synthesizer, synthesize
 from parrot.stt import load_recognizer, load_vad, transcribe
@@ -25,13 +27,13 @@ def listen(min_silence_duration: float = 0.5, samplerate: int = 16000) -> str:
     vad = load_vad(samplerate=samplerate, min_silence_duration=min_silence_duration)
     window_size = vad.config.silero_vad.window_size  # samples the VAD requires per accept_waveform call
 
-    mic = stream_mic(samplerate=samplerate, block_size=window_size)
-    while True:
-        vad.accept_waveform(next(mic))
-        if not vad.empty():
-            samples = vad.front.samples
-            vad.pop()
-            return transcribe(recognizer, samples, samplerate)
+    # release the mic as soon as speech ends, rather than whenever the generator gets garbage collected
+    with closing(stream_mic(samplerate=samplerate, block_size=window_size)) as mic:
+        while vad.empty():
+            vad.accept_waveform(next(mic))
+    samples = vad.front.samples
+    vad.pop()
+    return transcribe(recognizer, samples, samplerate)
 
 
 # --- text-to-speech ---

@@ -2,14 +2,75 @@
 
 import asciichartpy
 import io
+import sys
+import time
 
 import numpy as np
 import sounddevice as sd
 import soundfile as sf
 
 from collections import deque
-from typing import Iterator
+from collections.abc import Generator
+from os import getenv
 
+
+# --- device handling ---
+
+def _env_device(env_var: str) -> int | str | None:
+    """Read a device override from the environment.
+
+    Args:
+        env_var: Name of the environment variable, i.e. AUDIO_INPUT_DEVICE.
+
+    Returns:
+        A device index, a substring of a device name as listed by `sd.query_devices()`
+        (preferred, since indices shift as devices come and go), or None for the system default.
+    """
+    value = getenv(env_var, "").strip()
+    return int(value) if value.isdigit() else (value or None)
+
+# every stream below opens these unless given an explicit device
+sd.default.device = (_env_device("AUDIO_INPUT_DEVICE"), _env_device("AUDIO_OUTPUT_DEVICE"))
+
+def open_stream[S: sd.InputStream | sd.OutputStream](
+        stream_class: type[S], attempts: int = 4, backoff: float = 0.5, **kwargs
+) -> S:
+    """Open and start a stream, retrying on PortAudio errors.
+
+    Opening a device can fail transiently (e.g. while the OS is reconfiguring it),
+    so each failure is logged, waits a little longer, re-scans devices, and retries.
+
+    Args:
+        stream_class: `sd.InputStream` or `sd.OutputStream`.
+        attempts: Total number of tries before giving up.
+        backoff: Seconds to wait after the first failure, growing linearly per attempt.
+        **kwargs: Passed through to `stream_class`.
+
+    Returns:
+        A started stream, which the caller is responsible for closing.
+
+    Raises:
+        sd.PortAudioError: If every attempt fails.
+    """
+    for attempt in range(1, attempts):
+        try:
+            return _start_stream(stream_class, **kwargs)
+        except sd.PortAudioError as e:
+            print(f"parrot: {e}, retrying ({attempt}/{attempts - 1})", file=sys.stderr)
+            time.sleep(backoff * attempt)
+            sd._terminate()     # re-initialize PortAudio so it re-scans devices (it only does so at startup)
+            sd._initialize()
+    return _start_stream(stream_class, **kwargs)
+
+def _start_stream[S: sd.InputStream | sd.OutputStream](stream_class: type[S], **kwargs) -> S:
+    """Open and start a single stream, closing it if it fails to start."""
+    stream = stream_class(**kwargs)
+    try:
+        stream.start()
+    except sd.PortAudioError:
+        stream.close(ignore_errors=True)    # an opened-but-unstarted stream still holds the device
+        raise
+    return stream
 
 # --- raw arrays: for live, in-process use (i.e. streaming to a speech-to-text model) ---
 
@@ -38,10 +99,14 @@ def play(frames: np.ndarray, samplerate: int) -> None:
     Returns:
         None. Blocks until playback finishes.
     """
-    sd.play(frames, samplerate)
-    sd.wait()
+    frames = np.asarray(frames, dtype=np.float32)
+    if frames.ndim == 1:
+        frames = frames[:, np.newaxis]  # (samples,) -> (samples, channels)
+    with open_stream(sd.OutputStream, samplerate=samplerate, channels=frames.shape[1], dtype="float32") as stream:
+        stream.write(frames)    # stream.__exit__ then blocks until the buffer has drained
 
-def stream_mic(samplerate: int = 16000, block_size: int = 512) -> Iterator[np.ndarray]:
+
+def stream_mic(samplerate: int = 16000, block_size: int = 512) -> Generator[np.ndarray, None, None]:
     """Continuously yield raw audio blocks from the default mic.
 
     Unlike `record`, this doesn't wait for a fixed duration, it opens an
@@ -55,7 +120,7 @@ def stream_mic(samplerate: int = 16000, block_size: int = 512) -> Iterator[np.nd
     Yields:
         1-D numpy arrays of `block_size` mono samples, float32.
     """
-    with sd.InputStream(samplerate=samplerate, channels=1, dtype="float32") as stream:
+    with open_stream(sd.InputStream, samplerate=samplerate, channels=1, dtype="float32") as stream:
         while True:
             block, _ = stream.read(block_size)
             yield block.reshape(-1)
@@ -96,8 +161,7 @@ def play_wav(wav: bytes) -> None:
         None. Blocks until playback finishes.
     """
     data, samplerate = sf.read(io.BytesIO(wav))
-    sd.play(data, samplerate)
-    sd.wait()
+    play(data, samplerate)
 
 
 # --- visualization ---

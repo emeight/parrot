@@ -10,15 +10,17 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "asciichartpy>=1.5.25",
+    "fastapi>=0.143.2",
     "httpx>=0.28.1",
     "numpy>=2.5.3",
     "sherpa-onnx>=1.13.8",
     "sounddevice>=0.5.6",
     "soundfile>=0.14.0",
+    "uvicorn>=0.54.0",
 ]
 
 [project.optional-dependencies]
-server = ["fastapi>=0.115", "uvicorn>=0.34"]
+server = []
 
 [project.scripts]
 parrot = "parrot.cli:repeat"

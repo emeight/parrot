@@ -1,6 +1,7 @@
 """In-memory audio processing."""
 
 import asciichartpy
+import httpx
 import io
 import sys
 import time
@@ -202,3 +203,40 @@ def plot_mic(samplerate: int = 44100, block_size: int = 1024, width: int = 80, h
     except KeyboardInterrupt:
         # graceful exit on ^C, no traceback
         print()
+
+
+# remote methods for raspberry pi
+def stream_remote_mic(url: str, block_size: int = 512) -> Generator[np.ndarray, None, None]:
+    """Continuously yield raw audio blocks from a remote mic, i.e. m0pi's /mic.
+
+    Args:
+        url: URL streaming raw 16-bit little-endian mono PCM.
+        block_size: Number of samples yielded per iteration.
+
+    Yields:
+        1-D numpy arrays of `block_size` mono samples, float32.
+    """
+    block_bytes = block_size * 2    # 2 bytes per int16 sample
+    buf = b""
+    with httpx.stream("GET", url, timeout=None) as r:
+        r.raise_for_status()
+        for chunk in r.iter_bytes():
+            buf += chunk    # chunks arrive at arbitrary sizes, so only yield whole blocks
+            while len(buf) >= block_bytes:
+                block, buf = buf[:block_bytes], buf[block_bytes:]
+                yield np.frombuffer(block, "<i2").astype(np.float32) / 32768
+
+
+def play_remote(frames: np.ndarray, samplerate: int, url: str) -> None:
+    """Play raw audio frames through a remote speaker, i.e. m0pi's /speaker.
+
+    Args:
+        frames: Numpy array of audio samples.
+        samplerate: Sample rate of frames, in Hz.
+        url: URL accepting raw 16-bit little-endian mono PCM.
+
+    Returns:
+        None. Blocks until the remote finishes playback.
+    """
+    pcm = (np.clip(frames, -1, 1) * 32767).astype("<i2").tobytes()
+    httpx.post(url, params={"rate": samplerate}, content=pcm, timeout=None).raise_for_status()

@@ -1,4 +1,5 @@
 """Console script entry points."""
+import os
 
 from parrot import listen, speak
 
@@ -23,5 +24,22 @@ def scribe() -> None:
     try:
         while True:
             print(listen())
+    except KeyboardInterrupt:
+        print()
+
+
+def remote() -> None:
+    """Repeat back what's heard, using m0pi's mic and speaker at M0PI_URL.
+
+    Returns:
+        None. Runs until interrupted with Ctrl+C.
+    """
+    url = os.environ["M0PI_URL"]
+    try:
+        while True:
+            text = listen(mic_url=f"{url}/mic")
+            print(text)
+            if text:    # the VAD can fire on noise, and that transcribes to nothing
+                speak(text, speaker_url=f"{url}/speaker")
     except KeyboardInterrupt:
         print()

@@ -1,10 +1,12 @@
 """Speech-to-text (STT) model wrappers."""
-
 import sherpa_onnx
 
 import numpy as np
 
+from functools import cache
 
+
+@cache
 def load_recognizer(
     encoder: str = "models/parakeet/encoder.int8.onnx",
     decoder: str = "models/parakeet/decoder.int8.onnx",

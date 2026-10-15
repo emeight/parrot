@@ -1,10 +1,12 @@
 """Text-to-speech (TTS) model wrappers."""
-
 import sherpa_onnx
 
 import numpy as np
 
+from functools import cache
 
+
+@cache
 def load_synthesizer(
     model: str = "models/kokoro/model.onnx",
     voices: str = "models/kokoro/voices.bin",
